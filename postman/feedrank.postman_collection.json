@@ -1,0 +1,286 @@
+{
+  "info": {
+    "name": "FeedRank API",
+    "_postman_id": "feedrank-v1",
+    "description": "FeedRank — hybrid fan-out social feed service.\n\nWorkflow:\n1. Create two users (alice, celebrity_bob)\n2. Follow: alice follows celebrity_bob\n3. Create posts as both users\n4. Read alice's feed — observe hybrid merge\n\nVariables:\n  base_url     — API base URL (default: http://localhost:8080)\n  alice_id     — set after Create User (Alice)\n  celeb_id     — set after Create User (Celebrity Bob)\n  cursor       — updated automatically after each feed read",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",  "value": "http://localhost:8080", "type": "string" },
+    { "key": "alice_id",  "value": "",                      "type": "string" },
+    { "key": "celeb_id",  "value": "",                      "type": "string" },
+    { "key": "cursor",    "value": "0",                     "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status ok', () => {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Create User — Alice",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"username\": \"alice\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('alice_id', json.id);",
+                  "pm.test('has id', () => pm.expect(json.id).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Create User — Celebrity Bob",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/users",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"username\": \"celebrity_bob\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('celeb_id', json.id);",
+                  "pm.test('not celebrity yet', () => pm.expect(json.is_celebrity).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Get User — Alice",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users/{{alice_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('username match', () => pm.expect(json.username).to.eql('alice'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Follows",
+      "item": [
+        {
+          "name": "Alice follows Celebrity Bob",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/follows",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"follower_id\": {{alice_id}}, \"followee_id\": {{celeb_id}} }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('follower_count incremented', () => pm.expect(json.follower_count).to.be.greaterThan(0));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Posts",
+      "item": [
+        {
+          "name": "Create Post — as Alice (normal user)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/posts",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"author_id\": {{alice_id}}, \"content\": \"Hello from Alice! This post gets fanned out to her followers.\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('has post id', () => pm.expect(json.id).to.be.a('number'));",
+                  "// NOTE: fan-out is async — the post will appear in followers'",
+                  "// feeds after the worker processes the job (usually < 1s in local dev)."
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Create Post — as Celebrity Bob",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/posts",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"author_id\": {{celeb_id}}, \"content\": \"Celebrity post — stored in celebrity_posts:{id}, NOT fanned out to all followers.\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "// In hybrid mode, this post is O(1) at write time —",
+                  "// only ONE Redis ZADD to celebrity_posts:{celeb_id}.",
+                  "// In pure mode, this would ZADD to every single follower's timeline."
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Feed",
+      "item": [
+        {
+          "name": "Read Feed — Alice (first page)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/feed?user_id={{alice_id}}&cursor=0&limit=20",
+              "query": [
+                { "key": "user_id", "value": "{{alice_id}}" },
+                { "key": "cursor",  "value": "0" },
+                { "key": "limit",   "value": "20" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('has items array', () => pm.expect(json.items).to.be.an('array'));",
+                  "// Save cursor for next page",
+                  "if (json.next_cursor && json.next_cursor > 0) {",
+                  "  pm.collectionVariables.set('cursor', json.next_cursor);",
+                  "}",
+                  "// The feed merges Alice's timeline (normal-user posts fanned out to her)",
+                  "// with Celebrity Bob's celebrity_posts, sorted by score (newest first)."
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Read Feed — Alice (next page, cursor-based)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/feed?user_id={{alice_id}}&cursor={{cursor}}&limit=20",
+              "query": [
+                { "key": "user_id", "value": "{{alice_id}}" },
+                { "key": "cursor",  "value": "{{cursor}}" },
+                { "key": "limit",   "value": "20" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "// Cursor-based: no duplicates or skipped posts even if",
+                  "// new posts were written between this and the previous request.",
+                  "if (json.next_cursor && json.next_cursor > 0) {",
+                  "  pm.collectionVariables.set('cursor', json.next_cursor);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ]
+}

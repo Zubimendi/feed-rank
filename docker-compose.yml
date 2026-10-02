@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────
+  # Postgres — durable source of truth
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: feedrank_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: feedrank
+      POSTGRES_PASSWORD: feedrank
+      POSTGRES_DB: feedrank
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U feedrank -d feedrank"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─────────────────────────────────────────────
+  # Redis — timeline sorted-set cache
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: feedrank_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─────────────────────────────────────────────
+  # Asynq (Redis-backed) replaces QueueLine for
+  # self-contained local dev. The worker and api
+  # share the same Redis instance for the queue.
+  # ─────────────────────────────────────────────
+
+  # ─────────────────────────────────────────────
+  # API server
+  # ─────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: feedrank_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://feedrank:feedrank@postgres:5432/feedrank?sslmode=disable
+      REDIS_URL: redis:6379
+      CELEBRITY_THRESHOLD: "10000"
+      TIMELINE_CAP: "500"
+      FANOUT_MODE: hybrid   # set to "pure" to benchmark
+      PORT: "8080"
+
+  # ─────────────────────────────────────────────
+  # Fan-out worker
+  # ─────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: feedrank_worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://feedrank:feedrank@postgres:5432/feedrank?sslmode=disable
+      REDIS_URL: redis:6379
+      CELEBRITY_THRESHOLD: "10000"
+      TIMELINE_CAP: "500"
+      FANOUT_MODE: hybrid   # must match api
+
+volumes:
+  postgres_data:
+  redis_data:

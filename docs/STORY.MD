@@ -32,3 +32,21 @@ it, is what separates an answer from a demonstrated understanding.
    this entire project.
 4. Explain why offset pagination breaks under a live-writing sorted set,
    and what cursor-based pagination fixes.
+
+---
+
+## LinkedIn tags
+```
+#SystemDesign #GoLang #BackendEngineering #DistributedSystems
+#SoftwareArchitecture #Redis #PostgreSQL #LoadTesting
+#CareerDevelopment #TechPortfolio
+```
+
+## Medium tags
+```
+Go, System Design, Redis, Backend Engineering, Distributed Systems,
+Twitter Architecture, Fan-out, Social Feed, Load Testing, Software Engineering
+```
+
+## Medium thumbnail
+`docs/medium_thumbnail.jpg` — generated 16:9 hero image for the article.
