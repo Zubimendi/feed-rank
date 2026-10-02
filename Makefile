@@ -11,16 +11,16 @@ REDIS_URL    ?= localhost:6379
 
 # Bring the full stack up (Postgres + Redis + api + worker)
 up:
-	docker compose up --build -d
+	docker-compose up --build -d
 	@echo "✅  Stack is up. API → http://localhost:8080"
 
 # Tear everything down
 down:
-	docker compose down
+	docker-compose down
 
 # Tail logs from all services
 logs:
-	docker compose logs -f
+	docker-compose logs -f
 
 # Postgres + Redis only (useful during local dev when running api/worker natively)
 infra:
@@ -29,9 +29,12 @@ infra:
 
 ## ── Migrations (golang-migrate) ─────────────────────────────────────────────
 
-# Run all pending UP migrations
 migrate:
-	migrate -path ./migrations -database "$(DATABASE_URL)" up
+	@if command -v migrate >/dev/null 2>&1; then \
+		migrate -path ./migrations -database "$(DATABASE_URL)" up; \
+	else \
+		docker compose exec -T postgres psql -U feedrank -d feedrank -f /docker-entrypoint-initdb.d/01_init.sql; \
+	fi
 
 # Roll back the last migration
 migrate-down:
@@ -66,6 +69,10 @@ test:
 # Seed the DB with realistic data, then run the k6 benchmark
 seed:
 	go run ./loadtest/seed/main.go
+
+# Live hybrid fan-out architecture simulation & proof
+simulate:
+	go run ./scripts/simulate.go
 
 # Run the hybrid benchmark
 load-test:
